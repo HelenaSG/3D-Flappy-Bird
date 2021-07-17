@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<head>
+<title>Helena's game</title>
+<style>
+    body {
+        text-align: center;
+    }
+</style>
+<script src="three.min.js"></script>
+<script src="GLTFLoader.js"></script>
+<script src="KeyboardState.js"></script>
+<script src="SPE.min.js"></script>
+
+<script>
+    var scene, camera, renderer;  // Three.js rendering basics.
+    var canvas;  // The canvas on which the image is rendered.
+
+    var listener = new THREE.AudioListener();
+    var fontLoader = new THREE.FontLoader();
+    var loader = new THREE.TextureLoader();
+    var loaderGLTF = new THREE.GLTFLoader();//for blender
+    var sound = new THREE.Audio( listener );// create a global audio source
+    var audioLoader = new THREE.AudioLoader();
+
+    var iceTexture = loader.load("ice.jpg");
+    var iceTexture2 = loader.load("ice2.jpg");
+
+    var keyboard = new KeyboardState();
+
+    var dirLight; // Our directional light is global so we can change its position.
+
+    var velocity = new THREE.Vector3();
+    var objects = [];
+    var bird, body;
+
+    //flappy wings
+    var wingA, wingB, Rwing, Lwing;
+    var flapA = 0, flapB = 0;
+    var rotationCount;
+    var mixer;
+
+    //var yTracker = -266;
+    var crash = false; //boolean
+    var score = 0;
+    var newCone = true;
+    var start = false;
+    var printed = false;
+    var finished = false;
+    var removeName = false;
+    var HomeY = 50;
+
+    // Create the scene. This function is called once, as soon as the page loads.
+    // The renderer has already been created before this function is called.
+    function createWorld() {
+
+        renderer.setClearColor(0); // Set background color (0, or 0x000000, is black).
+        scene = new THREE.Scene(); // Create a new scene which we can add objects to.
+
+        // create a camera, sitting on the positive z-axis.  The camera is not part of the scene.
+        camera = new THREE.PerspectiveCamera(80, canvas.width/canvas.height, 1, 1000000);
+        //camera.position.z =150; // pull back the camera
+        camera.position.z =300;
+        //camera.position.x = 100;
+        camera.position.x = 700;
+        camera.position.y = -260;
+        //camera.rotation.y = 0.4;
+        camera.rotation.y = 1.4;
+        camera.rotation.z = 0.3;
+        camera.rotation.x = 1.3;
+
+        //original view
+        // camera.position.z = 300; // pull back the camera
+        // camera.position.y = -200;
+        // camera.rotation.x = 0.9;
+
+        // create an AudioListener and add it to the camera
+        camera.add( listener );
+        // load a sound and set it as the Audio object's buffer
+        audioLoader.load( 'AKEN - MAMAMOO-WIND FLOWER（AKEN Remix）.mp3', function( buffer ) {
+        //audioLoader.load( 'taptap.mp3', function( buffer ) {
+        	sound.setBuffer( buffer );
+        	sound.setLoop( true );
+        	sound.setVolume( 0.5 );
+        	sound.play();
+        });
+
+        scene.add( new THREE.HemisphereLight( 0x443333, 0x222233 ) );
+        var light = new THREE.DirectionalLight( 0xffffff, 1 );
+        light.position.set( 1, 1, 1 );
+        scene.add( light );
+        var light2 = new THREE.DirectionalLight( 0xffffff, 1 );
+        light2.position.set( 1, -1, 1 );
+        scene.add( light2 );
+
+
+
+        // var floorGeometry = new THREE.PlaneGeometry(256, 51200);//76800
+        // var floorTexture = THREE.ImageUtils.loadTexture("ground2.jpg");
+        // floorTexture.wrapS = THREE.RepeatWrapping;
+        // floorTexture.wrapT = THREE.RepeatWrapping;
+        // floorTexture.repeat.set(1, 200);//300
+        // var floorMaterial = new THREE.MeshPhongMaterial({ map: floorTexture, side: THREE.DoubleSide});
+        // var floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        // floor.position.set(0, 0, 0);
+        // scene.add(floor);
+
+        var floorGeometry = new THREE.PlaneGeometry(256, 51200);//76800
+        var t = THREE.ImageUtils.loadTexture("ground.jpg");
+        t.wrapS = THREE.RepeatWrapping;
+        t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(1, 200);//300
+        var m = THREE.ImageUtils.loadTexture("normal map.jpg");
+        m.wrapS = THREE.RepeatWrapping;
+        m.wrapT = THREE.RepeatWrapping;
+        m.repeat.set(1, 200);//300
+        var mat2 = new THREE.MeshPhongMaterial({map: t,normalMap: m});
+        var mesh = new THREE.Mesh(floorGeometry, mat2);
+        mesh.position.set(0, 0, 0);
+        scene.add(mesh);
+
+        //The bird
+        bird = new THREE.Object3D();
+        scene.add(bird);
+        bird.position.z = 1500;
+
+        // Load a glTF bird body
+        loaderGLTF.load(
+            // here is the resource URL.  CHANGE THIS TO YOUR FILE NAME
+            'bird.glb',
+
+            // function below is called when the resource is loaded
+            function ( gltf ) {
+
+                gltf.animations; // Array<THREE.AnimationClip>
+                gltf.scene; // THREE.Scene
+                gltf.scenes; // Array<THREE.Scene>
+                gltf.cameras; // Array<THREE.Camera>
+                gltf.asset; // Object
+
+                bird.add( gltf.scene );
+                body = gltf.scene;  // we're making our variable hold the loaded object
+
+                //gltfObj.scale.set(5, 5, 5);
+                body.scale.set(25, 25, 25);
+                //body.position.z = 100;
+                body.rotation.x = 1.8;
+                body.rotation.y = 3.14;
+
+            },
+
+            // called while loading is progressing
+            function ( xhr ) {
+                console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+            },
+
+            // called when loading has errors
+            function ( error ) {
+                console.log( 'An error happened' );
+            }
+        );
+
+        wingA = new THREE.Object3D();
+        wingB = new THREE.Object3D();
+        wingA.position.x = 35;
+        wingB.position.x = -35;
+        bird.add(wingA);
+        bird.add(wingB);
+
+        //right wing
+        loaderGLTF.load(
+            // here is the resource URL.  CHANGE THIS TO YOUR FILE NAME
+            'wing.glb',
+
+            // function below is called when the resource is loaded
+            function ( gltf ) {
+
+                gltf.animations; // Array<THREE.AnimationClip>
+                gltf.scene; // THREE.Scene
+                gltf.scenes; // Array<THREE.Scene>
+                gltf.cameras; // Array<THREE.Camera>
+                gltf.asset; // Object
+
+                wingA.add( gltf.scene );
+                Rwing = gltf.scene;  // we're making our variable hold the loaded object
+
+                //gltfObj.scale.set(5, 5, 5);
+                Rwing.scale.set(25, 25, 25);
+                //Rwing.position.x = 50;
+                Rwing.position.z = 20;
+                Rwing.position.y = -30;
+                Rwing.rotation.x = 1.8;
+                Rwing.rotation.y = 3.14;
+                //Rwing.rotation.z = -0.05;
+
+            },
+
+            // called while loading is progressing
+            function ( xhr ) {
+                console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+            },
+
+            // called when loading has errors
+            function ( error ) {
+                console.log( 'An error happened' );
+            }
+        );
+
+
+        //left wing
+        loaderGLTF.load(
+            // here is the resource URL.  CHANGE THIS TO YOUR FILE NAME
+            'wing.glb',
+
+            // function below is called when the resource is loaded
+            function ( gltf ) {
+
+                gltf.animations; // Array<THREE.AnimationClip>
+                gltf.scene; // THREE.Scene
+                gltf.scenes; // Array<THREE.Scene>
+                gltf.cameras; // Array<THREE.Camera>
+                gltf.asset; // Object
+
+                wingB.add( gltf.scene );
+                Lwing = gltf.scene;  // we're making our variable hold the loaded object
+
+                //gltfObj.scale.set(5, 5, 5);
+                Lwing.scale.set(25, 25, 25);
+                Lwing.position.z = 20;
+                Lwing.position.y = -30;
+                Lwing.rotation.x = 1.8;
+                Lwing.rotation.y = 3.14;
+                Lwing.rotation.z = -0.05;
+
+            },
+
+            // called while loading is progressing
+            function ( xhr ) {
+                console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+            },
+
+            // called when loading has errors
+            function ( error ) {
+                console.log( 'An error happened' );
+            }
+        );
+
+        //ice cones
+        for (var i = 1; i <= HomeY;i++) { //100
+          if(i == HomeY){
+            var y = (HomeY+1) * 500;
+            loadTree(y);
+          }
+          else{
+            var ht=Math.random() * 500;
+            if (ht<200){ht = 200}
+            if (ht>500){ht = 500}
+
+            var iceGeometry = new THREE.ConeGeometry( 50, ht, 32 );
+            var iceMaterial = new THREE.MeshBasicMaterial({ map: iceTexture});
+            mesh = new THREE.Mesh(iceGeometry, iceMaterial);
+
+
+            // var iceGeometry = new THREE.ConeGeometry( 50, ht, 32 );
+            // var t = THREE.ImageUtils.loadTexture("ice.jpg");
+            // var m = THREE.ImageUtils.loadTexture("ice normal.jpg");
+            // var mat2 = new THREE.MeshPhongMaterial({map: t,normalMap: m});
+            // iceGeometry = new THREE.ConeGeometry(80, 1000-ht, 32);
+            // var mesh = new THREE.Mesh(iceGeometry, mat2);
+
+            mesh.rotation.x =1.57;
+            mesh.position.x =0;
+            mesh.position.y = (i+1) * 500;
+            mesh.position.z = ht / 2;
+            scene.add(mesh);
+            objects.push(mesh);
+
+            iceGeometry = new THREE.ConeGeometry(80, 1000-ht, 32);
+            mesh = new THREE.Mesh(iceGeometry, iceMaterial);
+            mesh.rotation.x =-1.57;
+            mesh.position.x =0;
+            mesh.position.y = (i+1) * 500;
+            mesh.position.z = ht  + 150 + (1000 - ht) / 2; //200 is the distanc btween cone pairs
+            scene.add(mesh);
+            objects.push(mesh);
+            }
+        }
+
+        //Fancy particles
+        PWorld();
+    }
+
+    function update() {
+        keyboard.update();
+
+        if ( keyboard.down("left") ) {
+            crash = false;
+        }
+        if ( keyboard.down("right") ) {
+        }
+        if ( keyboard.pressed("down") ) {
+        }
+        if ( keyboard.pressed("up") ) {
+        }
+        if ( keyboard.pressed("space") ) {
+          velocity.z = 300;
+          accelarate = 1;
+          bird.rotation.x += 0.5;
+          start = true;
+        }
+    }
+
+    function loadTree(y){
+      loaderGLTF.load(
+          // here is the resource URL.  CHANGE THIS TO YOUR FILE NAME
+          'tree.glb',
+
+          // function below is called when the resource is loaded
+          function ( gltf ) {
+
+              gltf.animations; // Array<THREE.AnimationClip>
+              gltf.scene; // THREE.Scene
+              gltf.scenes; // Array<THREE.Scene>
+              gltf.cameras; // Array<THREE.Camera>
+              gltf.asset; // Object
+
+              scene.add( gltf.scene );
+              var tree = gltf.scene;  // we're making our variable hold the loaded object
+
+              //gltfObj.scale.set(5, 5, 5);
+              tree.scale.set(40, 40, 40);
+              tree.position.z = 20;
+              tree.position.x = 50;
+              tree.position.y = y;
+              tree.rotation.x = Math.PI/2;
+              tree.rotation.z = -0.05;
+              tree.rotation.y = -1.3;
+
+          },
+
+          // called while loading is progressing
+          function ( xhr ) {
+              console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+          },
+
+          // called when loading has errors
+          function ( error ) {
+              console.log( 'An error happened' );
+          }
+      );
+    }
+
+    // Render the scene. This is called for each frame of the animation.
+    function render() {
+        requestAnimationFrame( render );
+        //Beginning scene
+        if(bird.position.y>1000){
+          if(!crash && bird.position.y < (HomeY+1) * 500){
+            renderHUD();
+          }
+          scene.remove(particleGroup.mesh);
+        }
+        else{
+          //particle system
+          Prender();
+          //print and remove name
+          if(!start){
+            renderName();
+          }
+          else{
+            if(!removeName){
+              removeName = true;
+              hud.clearRect(0,0,1200,800);
+            }
+          }
+        }
+
+        //wings animation
+        if(!crash){
+          if (flapA<1.3){
+            //Rwing z; wingA y;
+            wingA.rotation.y+=0.1;
+            flapA+=0.1;
+          }
+          if (flapA>=1.3){
+            wingA.rotation.y-=0.1;
+            flapA+=0.1;
+          }
+          if (flapA>2.6){
+            flapA=0;
+          }
+
+          if (flapB<1.3){
+            wingB.rotation.y-=0.1;
+            flapB+=0.1;
+          }
+          if (flapB>=1.3){
+            wingB.rotation.y+=0.1;
+            flapB+=0.1;
+          }
+          if (flapB>2.6){
+            flapB=0;
+          }
+        }
+
+        //restart function
+        if ( keyboard.pressed("right") ) {
+          hud.clearRect(0,0,1200,800);
+          createWorld();
+          crash = false;
+          score = 0;
+          printed = false;
+          //finished = false;
+          //velocity.y = 1;
+        }
+
+
+        //gravity
+        velocity.z -= 9.8 * 2.25;
+        bird.position.z+= velocity.z * 1.5/100;
+        velocity.y = 200;
+
+        //moveing forward
+        if(!crash && start && bird.position.y <= (HomeY+1) * 500){
+          bird.rotation.x = 0;
+          camera.position.y+= velocity.y * 2/50;
+          bird.position.y+= velocity.y * 2/50;
+          //yTracker += velocity.y * 2/50;
+        }
+
+        //If reach the end:
+        if(bird.position.y >= (HomeY+1) * 500){
+          if(!finished){
+            finished = true;
+            hud.clearRect(0,0,600,400);
+            renderCongrats();
+          }
+        }
+
+        //collision detection: rays tracing: 0front 1back 2up 3down
+        var rayForward = new THREE.Raycaster(bird.position, new THREE.Vector3(0, 1, 0), 0, 30)
+        var rayBack = new THREE.Raycaster(bird.position, new THREE.Vector3(0, -1, 0), 0, 70)
+        var rayUp = new THREE.Raycaster(bird.position, new THREE.Vector3(0, 0, 1), 0, 10)
+        var rayDown = new THREE.Raycaster(bird.position, new THREE.Vector3(0, 0, -1), 0, 10)
+        var rayScore = new THREE.Raycaster(bird.position, new THREE.Vector3(0, 0, 1), 0, 3000)
+
+        var intersecFront = rayForward.intersectObjects(objects);
+        var intersecBack = rayBack.intersectObjects(objects);
+        var intersecUp = rayUp.intersectObjects(objects);
+        var intersecDown = rayDown.intersectObjects(objects);
+        var intersecScore = rayScore.intersectObjects(objects);
+
+        //head crash/tail crash
+        // if (intersecFront.length > 0
+        //   || intersecBack.length > 0
+        //   || intersecUp.length > 0
+        //   || intersecDown.length > 0){
+        //     velocity.y = 0;
+        // }
+
+        //Keep track of the score
+        if (intersecScore.length > 0){
+          if (newCone) {
+            score += 1;
+            newCone = false;
+            //console.log(score);
+            var dala = new THREE.Audio( listener );
+            var audioLoader = new THREE.AudioLoader();
+            audioLoader.load( 'dala3.mp3', function( buffer ) {
+            	dala.setBuffer( buffer );
+            	dala.setLoop( false );
+            	dala.setVolume( 0.3 );
+            	dala.play();
+            });
+          }
+        }
+        else{
+          newCone = true;
+        }
+
+        //flying boundaries
+        if (bird.position.z < 60)
+        {
+            bird.position.z = 60;
+        }
+
+        if (bird.position.z > 900)
+        {
+            bird.position.z = 900;
+        }
+
+        //if crashes
+        // if (velocity.y==0) //crashed
+        // {
+        if (intersecFront.length > 0
+          || intersecBack.length > 0
+          || intersecUp.length > 0
+          || intersecDown.length > 0)
+        {
+          crash = true;
+          wingA.rotation.y = 0;
+          wingB.rotation.y = 0;
+          bird.rotation.x = 1.5;
+          sound.pause();
+
+          //Print the final score only once
+          if(!printed){
+            printed = true;
+            console.log(score);
+
+            hud.clearRect(0,0,1200,800);
+
+            // if (score<50){
+            //   currentScore = score.toString();
+            //   fontLoader.load("DengXian_regular.json",function(tex){
+            //       var textGeo = new THREE.TextGeometry(currentScore, {
+            //               size: 10,
+            //               height: 0.5,
+            //               curveSegments: 6,
+            //               font: tex,
+            //       });
+            //       var color = new THREE.Color();
+            //       color.setRGB(255, 250, 250);
+            //       var textMaterial = new THREE.MeshBasicMaterial({ color: color });
+            //       var text = new THREE.Mesh(textGeo , textMaterial);
+            //       text.scale.set(25, 25, 25);
+            //       text.position.y = yTracker;
+            //       text.position.x = 200;
+            //       text.position.z = 200;
+            //       text.rotation.z = 1.57;
+            //       text.rotation.y = 1.57;
+            //       scene.add(text);
+            //   });
+            // }
+            renderFinalScore();
+          }
+        }
+
+        update();
+
+        renderer.clear();
+        renderer.render( scene, camera );
+    }
+
+    // renders the HUD
+    function renderName() {
+        hud.fillStyle = "white";
+        hud.font = "20px Verdana";
+        hud.fillText("by Helena Shangguan",890,650);
+    }
+
+    //this keep updating the score
+    function renderHUD() {
+        hud.clearRect(0,0,1200,800);  // begin with blank slate
+        hud.fillStyle = "white";
+        hud.font = "50px Verdana";
+        hud.fillText(score,40,80);
+    }
+
+    //Printed when crashes
+    function renderFinalScore() {
+        hud.fillStyle = "white";
+        hud.font = "310px Verdana";
+        if(score<10){
+          hud.fillText(score,490,450);
+        }
+        else{
+          hud.fillText(score,390,450);
+        }
+    }
+
+    //Printed when reach home
+    function renderCongrats() {
+        hud.fillStyle = "white";
+        hud.font = "70px Verdana";
+        hud.fillText("YOU ARE HOME",360,300);
+    }
+
+    //Particle system setup
+    function PWorld() {
+        clock = new THREE.Clock();
+
+        particleGroup = new SPE.Group({
+                texture: {
+                    value: new THREE.TextureLoader().load('./smokeparticle.png')
+                }
+            });
+
+            emitter = new SPE.Emitter({
+                maxAge: {
+                    value: 2
+                },
+                position: {
+                    value: new THREE.Vector3(0, -20, 250),
+                    spread: new THREE.Vector3( 0, 0, 0 )
+                },
+
+                acceleration: {
+                    value: new THREE.Vector3(0, -10, 0),
+                    spread: new THREE.Vector3( 10, 0, 10 )
+                },
+
+                velocity: {
+                    value: new THREE.Vector3(0, 0, 0),
+                    //spread: new THREE.Vector3(5, 7.5, 5),
+                    spread: new THREE.Vector3(500, 750, 500),
+                    randomise: true
+                },
+
+                color: {
+                    value: [ new THREE.Color('blue'), new THREE.Color(0x08ff66) ]//#08FF66
+                },
+
+                size: {
+                    value: 30
+                },
+
+                particleCount: 2000,
+                activeMultiplier: 1
+            });
+
+            //particleGroup.mesh.scale.set(25, 25, 25);
+
+            particleGroup.addEmitter( emitter );
+            console.log(emitter.velocity.value.y);
+            scene.add( particleGroup.mesh );
+            console.log(emitter.particleCount);
+        }
+
+    //Particle system animation. This is called for each frame of the animation.
+    function Prender() {
+        dt = clock.getDelta();
+        //console.log(dt);
+        particleGroup.tick( dt );
+        //renderer.render(scene, camera);
+
+        // change the activity level
+        emitter.activeMultiplier = Math.max(0.4,emitter.activeMultiplier*0.99);
+        //console.log(emitter.velocity.value.y);
+        emitter.velocity.spread.x = Math.max(2,emitter.velocity.spread.x*0.99);
+        emitter.velocity.value.y = Math.max(15,emitter.velocity.value.y*0.99);
+        //emitter.velocity.spread.z = Math.max(2,emitter.velocity.spread.z*0.99);
+        if (Math.random()<0.01) {
+            // flare-up
+            emitter.activeMultiplier = 1; //Math.min(1,emitter.activeMultiplier+Math.random());
+            var burst = Math.random();
+            emitter.velocity.spread.x = 2+burst*3;
+            emitter.velocity.value.y = 15+burst*10;
+            emitter.velocity.spread.z = 2+burst*3;
+        }
+    }
+
+    function ending() {
+        dt = clock.getDelta();
+        //console.log(dt);
+        particleGroup.tick( dt );
+        //renderer.render(scene, camera);
+
+        // change the activity level
+        emitter.activeMultiplier = Math.max(0.4,emitter.activeMultiplier);
+        //console.log(emitter.velocity.value.y);
+        emitter.velocity.spread.x = Math.max(2,emitter.velocity.spread.x);
+        emitter.velocity.value.y = Math.max(15,emitter.velocity.value.y);
+        emitter.velocity.spread.z = Math.max(2,emitter.velocity.spread.z);
+    }
+
+
+    //----------------------------------------------------------------------------------
+
+    // The init() function is called by the onload event when the document has loaded.
+    function init() {
+        try {
+            canvas = document.getElementById("glcanvas");
+            renderer = new THREE.WebGLRenderer( { canvas: canvas, antialias: true} );
+           hudcanvas = document.getElementById("hudcanvas");
+           hud = hudcanvas.getContext("2d");
+        }
+        catch (e) {
+            document.getElementById("canvas-holder").innerHTML = "<h3><b>WebGL is not available.</b><h3>";
+            return;
+        }
+
+
+        createWorld();
+        render();
+
+        fontLoader.load("DengXian_regular.json",function(tex){
+            var textGeo = new THREE.TextGeometry("GO!", {
+                    size: 5,
+                    height: 0.5,
+                    curveSegments: 6,
+                    font: tex,
+            });
+            var color = new THREE.Color();
+            color.setRGB(255, 250, 250);
+            var textMaterial = new THREE.MeshBasicMaterial({ color: color });
+            var text = new THREE.Mesh(textGeo , textMaterial);
+            text.scale.set(25, 25, 25);
+            text.position.y = -680;
+            text.position.z = 30;
+            text.rotation.z = 1.57;
+            text.rotation.y = 1.57;
+            scene.add(text);
+        });
+        fontLoader.load("DengXian_regular.json",function(tex){
+            var textGeo = new THREE.TextGeometry("PRESS", {
+                    size: 1,
+                    height: 0.3,
+                    curveSegments: 6,
+                    font: tex,
+            });
+            var color = new THREE.Color();
+            color.setRGB(255, 250, 250);
+            var textMaterial = new THREE.MeshBasicMaterial({ map: iceTexture2 });
+            var text = new THREE.Mesh(textGeo , textMaterial);
+            text.scale.set(25, 25, 25);
+            text.position.y = -790;
+            text.position.z = 70;
+            text.rotation.z = 1.57;
+            text.rotation.y = 1.57;
+            scene.add(text);
+        });
+        fontLoader.load("DengXian_regular.json",function(tex){
+            var textGeo = new THREE.TextGeometry("[SPACE]", {
+                    size: 0.9,
+                    height: 0.2,
+                    curveSegments: 6,
+                    font: tex,
+            });
+            var color = new THREE.Color();
+            color.setRGB(255, 250, 250);
+            var textMaterial = new THREE.MeshBasicMaterial({ map: iceTexture2 });
+            var text = new THREE.Mesh(textGeo , textMaterial);
+            text.scale.set(25, 25, 25);
+            text.position.y = -800;
+            text.position.z = 30;
+            text.rotation.z = 1.57;
+            text.rotation.y = 1.57;
+            scene.add(text);
+        });
+        fontLoader.load("DengXian_regular.json",function(tex){
+            var textGeo = new THREE.TextGeometry("Flappy Bird", {
+                    size: 5,
+                    height: 1,
+                    curveSegments: 6,
+                    font: tex,
+            });
+            var color = new THREE.Color();
+            color.setRGB(255, 250, 250);
+            var textMaterial = new THREE.MeshPhongMaterial({ map: iceTexture2 });
+            var text = new THREE.Mesh(textGeo , textMaterial);
+            text.scale.set(25, 25, 25);
+            text.position.y = -550;
+            text.position.z = 450;
+            text.rotation.z = 1.62;
+            text.rotation.y = 1.57;
+            scene.add(text);
+        });
+        fontLoader.load("DengXian_regular.json",function(tex){
+            var textGeo = new THREE.TextGeometry("x Frozen", {
+                    size: 4,
+                    height: 1,
+                    curveSegments: 6,
+                    font: tex,
+            });
+            var color = new THREE.Color();
+            color.setRGB(255, 250, 250);
+            var textMaterial = new THREE.MeshPhongMaterial({ map: iceTexture2 });
+            textMaterial.bumpMap = THREE.ImageUtils.loadTexture('ice2.jpg');
+            textMaterial.bumpScale = 10;
+            var text = new THREE.Mesh(textGeo , textMaterial);
+            text.scale.set(25, 25, 25);
+            text.position.y = -80;
+            text.position.z = 300;
+            text.position.x = 30;
+            text.rotation.z = 1.62;
+            text.rotation.y = 1.57;
+            scene.add(text);
+        });
+    }
+
+</script>
+
+</head>
+<body onload="init()">
+<div id="hud-holder" style="width: 100vw; text-align: center; position: absolute; z-index: 1; background-color: transparent;">
+    <canvas id="hudcanvas" width="1200" height="800" style="background-color: transparent;"></canvas>
+</div>
+<div id="canvas-holder">
+    <canvas id="glcanvas" width="1200" height="800"></canvas>
+</div>
+</body>
+</html>
+
+</script>
